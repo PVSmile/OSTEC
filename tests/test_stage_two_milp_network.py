@@ -8,6 +8,10 @@ import math
 
 import pytest
 
+from rec_op_lem_prices.optimization_functions import (
+	run_pre_two_stage_collective_bilateral_milp,
+	run_pre_two_stage_collective_pool_milp
+)
 from rec_op_lem_prices.optimization.module.StageOneMILP import StageOneMILP
 from rec_op_lem_prices.optimization.module.StageTwoMILPBilateral import StageTwoMILPBilateral
 from rec_op_lem_prices.optimization.module.StageTwoMILPPool import StageTwoMILPPool
@@ -148,3 +152,22 @@ def test_without_grid_no_network_terms(market):
 	assert milp.status == 'Optimal'
 	assert results['obj_value'] == pytest.approx(milp.obj_value, abs=1e-6)
 	assert results[cost_key] == pytest.approx(milp.generate_outputs()[cost_key], abs=1e-6)
+
+
+@pytest.mark.parametrize('market, run_function', [
+	('bilateral', run_pre_two_stage_collective_bilateral_milp),
+	('pool', run_pre_two_stage_collective_pool_milp),
+])
+def test_network_through_optimization_functions(market, run_function):
+	# grid_data passed to the public two-stage functions: solve_milp applies the SOC cuts, so that the
+	# network limits are respected and the results match the ones of solve_milp_soc_cuts
+	_, base_inputs, cost_key = MARKETS[market]
+	inputs = _stress(copy.deepcopy(base_inputs), 6.0)
+	results, stage1_results = run_function(inputs, for_testing=True)
+	assert results['milp_status'] == 'Optimal'
+	assert all(r['milp_status'] == 'Optimal' for r in stage1_results)
+	_assert_network_limits(inputs, results)
+	assert max(max(v) for v in results['I_branch_pct'].values()) == pytest.approx(100.0, abs=1e-2)
+
+	_, reference = _solve(market, 6.0)
+	assert results['obj_value'] == pytest.approx(reference['obj_value'], rel=1e-6)

@@ -95,13 +95,12 @@ LEM structures), and a new three-stage collective *pool* MILP was also added, en
 curves and flexibility activation for a REC.
 
 ## Distribution network
-The second-stage collective MILPs (both *pool* and *bilateral* LEM structures) can optionally consider the technical 
-limits of a **radial distribution network**, provided through ```grid_data``` (nodes, lines, resistances and 
-reactances, voltage and current limits and slack node):
+The second-stage collective MILPs (both *pool* and *bilateral* LEM structures) can optionally consider the technical
+limits of a **radial distribution network**, by including ```grid_data``` in the backpack (nodes, lines, resistances
+and reactances, voltage and current limits and slack node):
 
-- the network is modelled with the **Relaxed Branch Flow Model** (DistFlow), whose second-order cone relaxation is 
-enforced through iterative linear cuts, so that the problem remains a MILP that can be solved with CBC 
-(use ```solve_milp_soc_cuts()``` instead of ```solve_milp()```)
+- the network is modelled with the **Relaxed Branch Flow Model** (DistFlow), whose second-order cone relaxation is
+enforced through iterative linear cuts, so that the problem remains a MILP that can be solved with CBC
 - when the network limits would be violated, load and generation can be curtailed, at a penalty cost
 - the results include node voltages, branch flows and currents and the power exchanged with the upstream grid
 
@@ -155,6 +154,10 @@ amount to be activated), returning the corresponding schedules
 ```run_post_two_stage_collective_bilateral_milp``` 
 - run the two-stage collective pre-delivery MILP, considering a *bilateral* LEM structure
 
+
+All collective functions above (and the pricing mechanisms below, which rely on them) accept an optional
+```grid_data``` in the backpack, to consider the distribution network in the second-stage MILP (see
+*Distribution network*); the individual MILP and the third stage do not consider the network.
 
 ### Main pricing mechanisms functions overview
 Under ```rec_op_lem_prices.pricing_mechanisms_functions``` the user can find:

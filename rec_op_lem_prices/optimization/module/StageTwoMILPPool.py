@@ -1173,7 +1173,13 @@ class StageTwoMILPPool:
 	def solve_milp(self):
 		"""
 		Function that heads the definition and solution of the second stage MILP.
+		When grid_data is provided, the MILP is solved with the SOC cuts of the network (see solve_milp_soc_cuts),
+		which are required for the network results (and limits) to be physically valid.
 		"""
+		if self._grid_data is not None:
+			self.solve_milp_soc_cuts(accept_tol=0)
+			return
+
 		# Define the MILP
 		self.__define_milp()
 
