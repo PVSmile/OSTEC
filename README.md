@@ -1,0 +1,260 @@
+<p align="center">
+  <img src="figures/ostec_banner.svg" alt="OSTEC - Optimised Scheduling Tool for Energy Communities" width="800" />
+</p>
+
+# Documentation
+
+***OSTEC*** (**O**ptimised **S**cheduling **T**ool for **E**nergy **C**ommunities) is a Python library (package 
+```rec_op_lem_prices```) that computes **optimal local energy market (LEM) prices** for Renewable Energy Communities (REC). 
+To this end, it provides various mechanisms and algorithms for calculating these prices. The optimality of the price 
+arrays computed depends on the architecture of the REC, the assets of its members and their energy supply contracts 
+with their suppliers, but it is always measured by its ability to promote internal transactions as opposed to buying 
+or selling energy from traders.
+
+The library provides the user with two sets of functions:
+- ***optimization_functions***, which include calls to a MILP module for individual and collective optimal management of 
+REC with stationary storage, PV generation and loads (all assets are assumed to be *behind-the-meter*)
+
+
+- ***pricing_mechanisms_functions***, which include several algorithms for defining LEM prices for a particular 
+operation horizon, taking advantage of the optimization functions also provided
+
+Both sets of functions are based on a basic MILP formulation for the scheduling of controllable assets 
+(namely batteries) and/or the optimal internal exchanges that should be established within a REC (a thorough explanation 
+of the algorithms implemented is published [here](https://www.mdpi.com/1996-1073/16/3/1143)). From there, the user is 
+presented with a variety of possibilites, namely:
+- make an individual optimization of the assets of any member of the REC,
+- make a collective optimization of the assets of all members of the REC,
+- make the same collective optimization but guaranteeing that the cost of each member is not penalized by participating 
+in the REC,
+- make a three-stage collective optimization that, on top of the previous stage, also determines the amount of 
+flexibility (from the flexible loads and BESS scheduled in the previous stages) that the REC is willing to provide 
+for a given flexibility price, enabling the computation of a REC-level bidding curve and the activation of a 
+previously submitted flexibility bid
+
+LEM prices can be computed through several pricing mechanisms and may require the computation of collective optimization 
+MILP. It is also important to define the timeframe for which the prices are being computed, since they can be used to 
+promote a REC operation centered on maximizing internal transactions or to establish the most advantageous transactions 
+for all members before communicating the share coefficients to the DSO.
+
+The overarching algorithm implemented for price computation, for the pre-delivery timeframe, is pictured below:
+
+![alt text](figures/pre.png)
+
+whilst the overarching algorithm implemented for the post-delivery timeframe is pictured below:
+
+![alt text](figures/post.png)
+
+Besides choosing between timeframes, the user will also be able to define the market paradigm for transacting local 
+energy:
+
+- either a true pool, where for each member only the total transacted energy (bought and sold) are established;
+- or bilateral contracts, where P2P transactions are specified.
+
+The following table explains the application scope of each combination between timeframe and market paradigm:
+
+![alt text](figures/table.png)
+
+
+Finally, the several market pricing mechanisms that can be chosen are:
+
+- **Mid-market rate (MMR)**
+- **Supply and demand ratio (SDR)**
+- **Compensated supply and demand ratio (SDRC)**
+- **Pool equilibrium**
+
+The first three mechanisms, MMR, SDR and SDRC are made available in two forms. A "complete" form, where all potential 
+buying and selling offers are considered for computing the prices at each time step, and a "partial" form where the only 
+offers considered are the ones that would be accepted if they were made under a pool equilibrium mechanism.
+More information on the equations behind these pricing mechanisms can be found 
+[here](https://www.mdpi.com/1996-1073/16/4/1949).
+
+
+Notes:
+- The pre-delivery timeframe algorithm is highly dependent on the quality and granularity of generation and consumption 
+forecast data.
+- All logic used for estimating costs follows the Portuguese legislation for REC in vigor (2023).
+- Stationary batteries are modelled following a simple "bucket" model which is 
+technology-agnostic.
+
+## Flexible loads
+The optimization module also schedules **behind-the-meter flexible loads**, 
+alongside stationary batteries, as controllable assets of a REC member:
+
+- **Electric water heaters (EWH)**, modelled through a thermal tank model that optimizes the heating schedule while 
+respecting hot water draw profiles and temperature comfort bounds
+- **Electric vehicles (EVs)**, modelled with charging (and discharging, for V2G) schedules constrained by trip 
+patterns, battery capacity and charging/discharging power limits
+- **HVAC systems**, modelled as a thermostatic load constrained by indoor temperature comfort bounds and rated 
+power/efficiency
+- **Heat pumps (HP)**, modelled with a coupled domestic hot water tank and space heating (radiator) thermal model, 
+constrained by comfort bounds on indoor and outlet water temperatures
+
+These flexible loads can be included in the individual and collective MILP formulations (both *pool* and *bilateral* 
+LEM structures), and a new three-stage collective *pool* MILP was also added, enabling the computation of bidding 
+curves and flexibility activation for a REC.
+
+## Distribution network
+The second-stage collective MILPs (both *pool* and *bilateral* LEM structures) can optionally consider the technical 
+limits of a **radial distribution network**, provided through ```grid_data``` (nodes, lines, resistances and 
+reactances, voltage and current limits and slack node):
+
+- the network is modelled with the **Relaxed Branch Flow Model** (DistFlow), whose second-order cone relaxation is 
+enforced through iterative linear cuts, so that the problem remains a MILP that can be solved with CBC 
+(use ```solve_milp_soc_cuts()``` instead of ```solve_milp()```)
+- when the network limits would be violated, load and generation can be curtailed, at a penalty cost
+- the results include node voltages, branch flows and currents and the power exchanged with the upstream grid
+
+Without ```grid_data```, the formulation is the same as before.
+
+## Main optimization functions overview
+Under ```rec_op_lem_prices.optimization_functions``` the user can find:
+
+
+```run_pre_individual_milp``` 
+- run a pre-delivery individual MILP, for a single REC member
+
+```run_pre_single_stage_collective_pool_milp``` 
+- run a purely collective pre-delivery MILP, considering a *pool* LEM structure  
+
+```run_pre_single_stage_collective_bilateral_milp``` 
+- run a purely collective pre-delivery MILP, considering a *bilateral* LEM structure  
+
+```run_pre_two_stage_collective_pool_milp``` 
+- run the two-stage collective pre-delivery MILP, where individual MILP are computed for each member and the resulting 
+operation costs with energy are fed into the collective MILP stage as constraints, considering a *pool* LEM structure
+
+```run_pre_two_stage_collective_bilateral_milp``` 
+- run the two-stage collective pre-delivery MILP, considering a *bilateral* LEM structure
+
+```run_pre_three_stage_collective_pool_milp``` 
+- run the three-stage collective pre-delivery MILP, considering a *pool* LEM structure; on top of the two-stage MILP, 
+this stage also determines the amount of flexibility the REC is willing to provide for a given flexibility price
+
+```run_bidding_curve``` 
+- similar to ```run_pre_three_stage_collective_pool_milp```, but runs the third stage multiple times for a range of 
+flexibility prices (from an initial to a final price, with a given increment), returning the resulting REC-level 
+bidding curve
+
+```bid_activation``` 
+- run the third stage for a previously submitted flexibility bid (given its flexibility price and the flexibility 
+amount to be activated), returning the corresponding schedules
+
+```run_post_individual_cost``` 
+- run a post-delivery individual MILP, for a single REC member
+
+```run_post_single_stage_collective_pool_milp``` 
+- run a purely collective post-delivery MILP, considering a *pool* LEM structure 
+
+```run_post_single_stage_collective_bilateral_milp``` 
+- run a purely collective post-delivery MILP, considering a *bilateral* LEM structure  
+
+```run_post_two_stage_collective_pool_milp``` 
+- run the two-stage collective post-delivery MILP, considering a *pool* LEM structure
+
+```run_post_two_stage_collective_bilateral_milp``` 
+- run the two-stage collective pre-delivery MILP, considering a *bilateral* LEM structure
+
+
+### Main pricing mechanisms functions overview
+Under ```rec_op_lem_prices.pricing_mechanisms_functions``` the user can find:
+
+```vanilla_mmr```
+- compute a LEM prices' array based on the MMR mechanism; no MILP is solved, the LEM offers are constructed based only 
+on the members' forecasted/ historical net consumption and respective opportunity costs; a pruned version (default) 
+can be selected where a preliminary pool is cleared and only accepted offers are considered   
+
+```vanilla_sdr```
+- compute a LEM prices' array based on the SDR mechanism; again, in this *vanilla* version, no MILP is solved, and a 
+pruned version is also available; it is also possible to establish a compensation factor between 0 and 1 to consider an 
+SDRC mechanism
+
+```vanilla_crossing_value```
+- compute a LEM prices' array based on a market pool clearing; again, in this *vanilla* version, no MILP is solved
+
+```dual_pre_pool```
+- a purely collective pre-delivery MILP is run and the shadow prices of a LEM equilibrium constraint are returned as 
+the optimal LEM prices  
+
+```dual_post_pool```
+- a purely collective post-delivery MILP is run and the shadow prices of a LEM equilibrium constraint are returned as 
+the optimal LEM prices
+
+```loop_pre_pool_mmr```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *pool* market structure is 
+run considering MMR as the pricing mechanism; a pruned version is also made available
+
+```loop_pre_pool_sdr```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *pool* market structure is 
+run considering SDR as the pricing mechanism; pruned a compensated versions are also made available 
+
+```loop_pre_pool_crossing_value```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *pool* market structure is 
+run considering the pool clearing as the pricing mechanism
+
+```loop_pre_bilateral_mmr```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *bilateral* market structure 
+is run considering MMR as the pricing mechanism; a pruned version is also made available
+
+```loop_pre_bilateral_sdr```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *bilateral* market structure 
+is run considering SDR as the pricing mechanism; pruned a compensated versions are also made available 
+
+```loop_pre_bilateral_crossing_value```
+- the overarching iterative algorithm presented above for the pre-delivery timeframe and a *bilateral* market structure 
+is run considering the pool clearing as the pricing mechanism
+
+```loop_post_pool_mmr```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *pool* market structure is 
+run considering MMR as the pricing mechanism; a pruned version is also made available
+
+```loop_post_pool_sdr```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *pool* market structure is 
+run considering SDR as the pricing mechanism; pruned a compensated versions are also made available 
+
+```loop_post_pool_crossing_value```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *pool* market structure is 
+run considering the pool clearing as the pricing mechanism
+
+```loop_post_bilateral_mmr```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *bilateral* market structure 
+is run considering MMR as the pricing mechanism; a pruned version is also made available
+
+```loop_post_bilateral_sdr```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *bilateral* market structure 
+is run considering SDR as the pricing mechanism; pruned a compensated versions are also made available 
+```loop_post_bilateral_crossing_value```
+- the overarching iterative algorithm presented above for the post-delivery timeframe and a *bilateral* market structure 
+is run considering the pool clearing as the pricing mechanism
+
+
+## Install guide: use it as a library
+
+The tool is implemented as a Python library. To install the library in, for example, a virtual environment, one must:
+- download this repository
+- change the working directory to the root folder of the repository:
+    ```shell
+    % cd /path/to/root_folder
+    ```
+- create the wheel file that will allow you to install the repository as a Python library 
+(make sure you have previously installed Python ~= 3.10 in your local computer / server);
+
+    ```shell
+    % python setup.py bdist_wheel
+    ``` 
+- after creating your virtual environment and activating it
+    (see [this](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#activating-an-environment)
+    example for conda environments), enter the newly created ```dist``` folder, copy the name of the ```.whl``` file and 
+install the library by using:
+    ```shell
+    % pip install wheel_file_name.whl
+    ```
+- (optional) return to the root folder path and run the tests provided to assert everything is working as it should:
+    ```shell
+    % python setup.py pytest
+    ```
+- to import the library use:
+    ```shell
+    import rec_op_lem_prices as rolp
+    ```
+  All methods listed above will be straightly available.
